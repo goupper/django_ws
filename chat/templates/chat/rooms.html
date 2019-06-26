@@ -1,0 +1,14 @@
+{#{% extends "base.html" %}#}
+
+{% block content %}
+<div>
+    <ul>
+        {% for foo in rooms %}
+            <li id="menu_demo_table">
+                <a href="{% url 'chat-url' foo.label %}">{{ foo.name }}--加入</a>
+            </li>
+        {% endfor %}
+
+    </ul>
+</div>
+{% endblock %}
