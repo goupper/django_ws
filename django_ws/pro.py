@@ -20,8 +20,17 @@ DATABASES = {
         'NAME': 'django_ws',
         'USER': 'postgres',
         'PASSWORD': 'postgres',
-        'HOST': 'localhost',
+        'HOST': '172.18.0.1',
         'PORT': '5433',
         'ATOMIC_REQUESTS': True,
     }
+}
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [('172.18.0.1', 6379)],
+        },
+    },
 }
