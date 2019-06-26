@@ -28,6 +28,7 @@ urlpatterns = [
     path('', views.rooms, name='index'),
     path('login/', views.login, name='login'),
     path('logout/', views.logout, name='logout'),
+    path('room/', views.create_room, name='create-room'),
     re_path('^chat/(?P<label>[^/]+)/$', views.chat, name='chat-url'),
     re_path('^rooms/$', views.rooms, name='rooms-url'),
     path('quit/', views.quit, name='quit-room')

@@ -53,7 +53,7 @@
 
                 <p>
                   {{ request.user.username }}
-                  <small>Last Login: {{ request.user.last_login }}</small>
+                  <small>Last Login: {{ request.user.last_login|date:"Y-m-d H:i:s" }}</small>
                 </p>
               </li>
               <li class="user-footer">

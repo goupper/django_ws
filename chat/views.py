@@ -6,6 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth import login as django_login, logout as django_logout, authenticate
 
 from .models import *
+from .forms import RoomForm
 
 
 @login_required(login_url='/login/')
@@ -59,8 +60,12 @@ def login(request):
     username = request.POST.get('username', '')
     password = request.POST.get('password', '')
     tel = f'131{random.randint(12341234, 99999999)}'
-    if User.objects.filter(username=username).exists():
-        user = authenticate(request, username=username, password=password)
+    user = User.objects.filter(username=username)
+    if user.exists():
+        user = user.first()
+        if not user.check_password(password):
+            user = None
+        # user = authenticate(request, username=tel, password=password)
     else:
         user = User.objects.create(
             username=username, telephone=tel
@@ -76,3 +81,17 @@ def login(request):
 def logout(request):
     django_logout(request)
     return redirect(reverse('index'))
+
+
+@login_required()
+def create_room(request):
+    if request.method == 'POST':
+        room_form = RoomForm(request.POST)
+        if room_form.is_valid():
+            Room.objects.create(
+                name=room_form.cleaned_data['name'], user=request.user,
+                content=room_form.cleaned_data['content']
+            )
+            return redirect(reverse('rooms-url'))
+    else:
+        return render(request, 'chat/room.html')

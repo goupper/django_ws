@@ -203,6 +203,9 @@ class Room(AbstractModel):
         User, on_delete=models.CASCADE, verbose_name='user',
         related_name='rooms'
     )
+    content = models.CharField(
+        max_length=128, blank=True, verbose_name='content'
+    )
 
     class Meta:
         verbose_name = 'Room'
