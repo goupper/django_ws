@@ -11,9 +11,9 @@ class RoomAdmin(admin.ModelAdmin):
 
 
 class RoomUserAdmin(admin.ModelAdmin):
-    list_display = ('user', 'room', 'is_delete')
+    list_display = ('user', 'room', 'is_delete', 'is_owner')
     list_per_page = 20
-    list_filter = ('user', 'room', 'is_delete')
+    list_filter = ('user', 'room', 'is_delete', 'is_owner')
 
 
 class MessageAdmin(admin.ModelAdmin):

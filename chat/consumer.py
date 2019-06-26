@@ -69,6 +69,40 @@ class ChatConsumer(AsyncWebsocketConsumer):
             self.room_owner_id = room['user_id']
             return room
 
+    @database_sync_to_async
+    def online_user_count(self):
+        # 统计在线用户
+        room_user_count = RoomUser.objects.filter(
+            is_delete=False, room__label=self.scope.get('url_route')['kwargs']['room_name']
+        ).count()
+        return room_user_count
+
+    def get_now_time(self):
+        return datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    async def user_connect_or_disconnect_notify(self, notify='connect'):
+        # 用户进入/离开 广播通知
+        connect_user = self.get_user()
+        online_user_count = await self.online_user_count()
+        content = f'用户{connect_user.username}进入了房间({online_user_count}人在线)' if notify == 'connect' \
+            else f'用户{connect_user.username}离开了房间({online_user_count}人在线)'
+        rs = dict(
+            user=dict(
+                id=connect_user.id, username=connect_user.username
+            ),
+            message=dict(
+                id=1, content=content, room_id=self.room_group_name
+            ),
+            notify=True
+        )
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'chat_message',
+                'message': rs
+            }
+        )
+
     async def connect(self):
         room = await self.get_room()
 
@@ -80,7 +114,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 self.channel_name
             )
             await self.group_add_user(room)
-
+            await self.user_connect_or_disconnect_notify()
             await self.accept()
 
     async def disconnect(self, close_code):
@@ -91,6 +125,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         )
         # 从房间移除用户
         await self.group_remove_user()
+        await self.user_connect_or_disconnect_notify(notify='disconnect')
 
     @database_sync_to_async
     def send_message(self, content=''):
@@ -100,7 +135,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
         message = Message.objects.create(
             room=room, content=content, user=self.get_user()
         )
-        self.message_user_id = message.user_id
         return message
 
     # Receive message from WebSocket
@@ -116,7 +150,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
             ),
             message=dict(
                 id=message.id, content=message.content, room_id=message.room_id
-            )
+            ),
+            notify=False
         )
         # Send message to room group
         await self.channel_layer.group_send(
@@ -130,13 +165,26 @@ class ChatConsumer(AsyncWebsocketConsumer):
     # Receive message from room group
     async def chat_message(self, event):
         # 会for循环将消息依次发送给房间内的所有用户
-        now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        owner_str = '(房主)' if event['message']['user']['id'] == self.room_owner_id else ''
-        if event['message']['user']['id'] == self.login_user_id:
-            message = f'{now}  我{owner_str}：' + event['message']['message']['content']
+        now = self.get_now_time()
+        if not event['message']['notify']:
+            owner_str = '(房主)' if event['message']['user']['id'] == self.room_owner_id else ''
+            if event['message']['user']['id'] == self.login_user_id:
+                message = f'{now}  我{owner_str}：' + event['message']['message']['content']
+            else:
+                message = f'{now}  {event["message"]["user"]["username"]}{owner_str}：' + \
+                          event['message']['message']['content']
         else:
-            message = f'{now}  {event["message"]["user"]["username"]}{owner_str}：' + event['message']['message']['content']
+            message = f'{now}  系统通知：' + event['message']['message']['content']
 
+        # Send message to WebSocket
+        await self.send(text_data=json.dumps({
+            'message': message
+        }))
+
+    async def notify_message(self, event):
+        # 系统广播通知
+        now = self.get_now_time()
+        message = f"{now} : {event['message']['message']}"
         # Send message to WebSocket
         await self.send(text_data=json.dumps({
             'message': message
