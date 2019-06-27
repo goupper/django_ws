@@ -206,64 +206,109 @@ class RoomConsumer(AsyncWebsocketConsumer):
         if room.exists():
             room = room.values().first()
             return room
-        return RoomIp.objects.filter(
+        room = RoomIp.objects.filter(
             is_delete=False
         ).values().first()
+        self.room_id = room.get('id')
+        return room
 
     @database_sync_to_async
     def add_user(self):
         # 用户进入房间记录
         # ip = self.get_user_ip(request)
         ip = self.scope['client'][0]
-        user_ip = UserIp.objects.create(
+        user_ips = UserIp.objects.filter(
             ip=ip
         )
+        if user_ips.exists():
+            user_ip = user_ips.first()
+        else:
+            user_ip = UserIp.objects.create(
+                ip=ip
+            )
         return user_ip
 
     async def user_connect_or_disconnect_notify(self, notify_type='connect'):
         # 用户进入/离开房间通知
+        print('client: ', str(self.scope['client']))
         user_ip = self.scope['client'][0]
         now = self.get_now_time()
         # 更新在线用户人数
-        room_user_number = await self.room_user_number(number_type=notify_type)
-
-        notify_content = '进入' if notify_type == 'connect' else '离开'
-        message = f'{now} 系统通知 : {user_ip}{notify_content}了房间({room_user_number}人在线)'
-        message_data = dict(
-            user_ip=user_ip,
-            time=now,
-            content=message,
-            online=room_user_number
-        )
-        rs = dict(
-            message=message_data,
-            notify=True
-        )
-        # Send message to room group
-        await self.channel_layer.group_send(
-            self.room_group_name,
-            {
-                'type': 'notify_message',
-                'message': rs
-            }
-        )
+        # room_user_number = await self.room_user_number(number_type=notify_type)
+        room_user_number, is_notify = await self.room_user_record(notify_type=notify_type)
+        if is_notify:
+            notify_content = '进入' if notify_type == 'connect' else '离开'
+            message = f'{now} 系统通知 : {user_ip}{notify_content}了房间({room_user_number}人在线)'
+            message_data = dict(
+                user_ip=user_ip,
+                time=now,
+                content=message,
+                online=room_user_number
+            )
+            rs = dict(
+                message=message_data,
+                notify=True
+            )
+            # Send message to room group
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'notify_message',
+                    'message': rs
+                }
+            )
 
     def get_user_ip(self):
         # 获取用户ip
-        request = self.scope['request']
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')
-        if x_forwarded_for and x_forwarded_for[0]:
-            login_ip = x_forwarded_for[0]
+        return self.scope['client'][0]
+
+    @database_sync_to_async
+    def room_user_record(self, notify_type='connect'):
+        # 添加/更新用户进入房间记录, 更新用户在线状态, 返回在线人数
+        user_ip = self.get_user_ip()
+        room_user_ips = RoomUserIp.objects.filter(
+            ip=user_ip, room_ip_id=self.room_id, client_port=self.scope['client'][-1]
+        )
+        is_online = True if notify_type == 'connect' else False
+        is_current_ip_online = False
+        if room_user_ips.exists():
+            # 进入过房间的用户则更新在线状态
+            if is_online:
+                room_user_ips.update(is_online=is_online, last_connect_time=datetime.datetime.now())
+            else:
+                # 离线时更新离线时间
+                room_user_ips.update(is_online=is_online, disconnect_time=datetime.datetime.now())
         else:
-            login_ip = request.META.get('REMOTE_ADDR', '')
-        return login_ip
+            # 没有进入过的用户记录
+            RoomUserIp.objects.create(
+                ip=user_ip, room_ip_id=self.room_id,
+                is_online=is_online, client_port=self.scope['client'][-1]
+            )
+        ip_online_users = RoomUserIp.objects.filter(
+            is_online=True, ip=user_ip).count()
+        if ip_online_users == 1:
+            # 只同一个ip只有一个web-socket连接在线或者没有时, 则广播通知
+            print('is_online: ', is_online)
+            if is_online:
+                # 离线时剩一个连接时, 则不通知, 建立连接时只有一个连接时才广播通知
+                is_current_ip_online = True
+            else:
+                is_current_ip_online = False
+        elif ip_online_users == 0:
+            is_current_ip_online = True
+        else:
+            # 同一个ip有多个web-socket在线, 则不广播通知
+            is_current_ip_online = False
+        # 同一个ip可能会有多个 web-socket连接, 因此需要根据ip地址去重
+        online_user_count = RoomUserIp.objects.filter(
+            is_online=True
+        ).distinct('ip').count()
+        return online_user_count, is_current_ip_online
 
     async def room_user_number(self, number_type='connect'):
         # 更新在线用户人数
-        # todo user aioredis
         cache_key = f'room:{self.room_id}'
         redis = await redis_client()
-        # room_user_number = cache.get(cache_key, 0)
         room_user_number = await redis.get(cache_key) or 0
         room_user_number = int(room_user_number.decode()) if isinstance(room_user_number, bytes) \
             else int(room_user_number)
@@ -274,7 +319,6 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 room_user_number -= 1
             else:
                 room_user_number = 0
-        # cache.set(cache_key, room_user_number)
         await redis.set(cache_key, room_user_number)
         return room_user_number
 

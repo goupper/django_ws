@@ -278,7 +278,7 @@ class Message(models.Model):
 
 
 class UserIp(AbstractModel):
-    ip = models.GenericIPAddressField()
+    ip = models.GenericIPAddressField(unique=True)
     username = models.CharField(
         max_length=32, blank=True, verbose_name='username'
     )
@@ -330,3 +330,41 @@ class RoomIp(AbstractModel):
             self.label = uuid.uuid4().hex
         return super(RoomIp, self).save(
             force_insert=force_insert, force_update=force_update, using=using, update_fields=update_fields)
+
+
+class RoomUserIp(models.Model):
+    ip = models.GenericIPAddressField()
+    room_ip_id = models.IntegerField(
+        default=0, blank=True, verbose_name='roomIp_id'
+    )
+    is_online = models.BooleanField(
+        default=False, blank=True, verbose_name='is_online'
+    )
+    connect_time = models.DateTimeField(
+        auto_now_add=True, blank=True, verbose_name='connect_time'
+    )
+    disconnect_time = models.DateTimeField(
+        blank=True, null=True, verbose_name='disconnect_time'
+    )
+    last_connect_time = models.DateTimeField(
+        auto_now_add=True, verbose_name='last_connect_time'
+    )
+    client_port = models.CharField(
+        max_length=16, blank=True, verbose_name='port'
+    )
+    # 每一次websocket连接, port都不一样, 因此同一个ip可能会有多个websocket连接
+
+    class Meta:
+        verbose_name = 'RoomUserIp'
+        verbose_name_plural = verbose_name
+        indexes = [
+            models.Index(fields=['ip']),
+            models.Index(fields=['room_ip_id']),
+            models.Index(fields=['is_online']),
+            models.Index(fields=['connect_time']),
+            models.Index(fields=['client_port'])
+        ]
+        unique_together = ('ip', 'client_port')
+
+    def __str__(self):
+        return str(self.ip)
