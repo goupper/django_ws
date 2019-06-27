@@ -33,13 +33,25 @@
   $('#page_header_descript').text('chat room');
 
   var chatSocket = new WebSocket(
-    'ws://' + window.location.host + '/ws/chat/{{label}}/');
-    {#'ws://' + window.location.host + '/ws/room/{{label}}/');#}
+      {% if chat_type != 'chat' %}
+          'ws://' + window.location.host + '/ws/room/{{label}}/'
+      {% else %}
+          'ws://' + window.location.host + '/ws/chat/{{label}}/'
+      {% endif %}
+  );
 
   chatSocket.onmessage = function(e) {
     var data = JSON.parse(e.data);
     var message = data['message'];
     console.log(message)
+      {% if chat_type != 'chat' %}
+        if (message['notify']) {
+            message = message['message']['content']
+        } else {
+            message = message['message']['time'] + ' ' + message['message']['user_ip'] + ' : ' + message['message']['content']
+        }
+      {% endif %}
+
     document.querySelector('#chat-log').value += (message + '\n');
   };
 

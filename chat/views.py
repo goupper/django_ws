@@ -11,6 +11,7 @@ from .forms import RoomForm
 
 @login_required(login_url='/login/')
 def chat(request, label=None):
+    chat_type = request.GET.get('chat_type', 'chat')
     room = Room.objects.filter(
         label=label, is_delete=False
     )
@@ -33,7 +34,7 @@ def chat(request, label=None):
         request, 'chat/index.html',
         context={
             'label': room.label, 'room': room, 'messages': messages,
-            'users': users, 'rooms': rooms
+            'users': users, 'rooms': rooms, 'chat_type': chat_type
         })
 
 
