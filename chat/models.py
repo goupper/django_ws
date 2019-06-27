@@ -275,3 +275,58 @@ class Message(models.Model):
 
     def __str__(self):
         return self.content[:10]
+
+
+class UserIp(AbstractModel):
+    ip = models.GenericIPAddressField()
+    username = models.CharField(
+        max_length=32, blank=True, verbose_name='username'
+    )
+
+    class Meta:
+        verbose_name = 'UserIp'
+        verbose_name_plural = verbose_name
+        indexes = [
+            models.Index(fields=['ip']),
+            models.Index(fields=['username'])
+        ]
+
+    def __str__(self):
+        return self.username
+
+    def save(self, force_insert=False, force_update=False, using=None,
+             update_fields=None):
+        if not self.username:
+            self.username = uuid.uuid4().hex
+        return super(UserIp, self).save(
+            force_insert=force_insert, force_update=force_update, using=using, update_fields=update_fields)
+
+
+class RoomIp(AbstractModel):
+    name = models.CharField(
+        max_length=64, blank=True, verbose_name='name'
+    )
+    label = models.CharField(
+        max_length=32, blank=True, verbose_name='label uuid'
+    )
+    content = models.CharField(
+        max_length=128, blank=True, verbose_name='content'
+    )
+
+    class Meta:
+        verbose_name = 'RoomIp'
+        verbose_name_plural = verbose_name
+        indexes = [
+            models.Index(fields=['label']),
+            models.Index(fields=['create_time'])
+        ]
+
+    def __str__(self):
+        return self.name
+
+    def save(self, force_insert=False, force_update=False, using=None,
+             update_fields=None):
+        if not self.label:
+            self.label = uuid.uuid4().hex
+        return super(RoomIp, self).save(
+            force_insert=force_insert, force_update=force_update, using=using, update_fields=update_fields)

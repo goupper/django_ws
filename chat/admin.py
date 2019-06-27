@@ -25,3 +25,6 @@ admin.site.register(User)
 admin.site.register(Room, RoomAdmin)
 admin.site.register(RoomUser, RoomUserAdmin)
 admin.site.register(Message, MessageAdmin)
+admin.site.register(UserIp)
+admin.site.register(RoomIp)
+

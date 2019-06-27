@@ -13,6 +13,7 @@ import datetime
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.forms.models import model_to_dict
+from django.core.cache import cache
 
 from .models import *
 
@@ -185,6 +186,138 @@ class ChatConsumer(AsyncWebsocketConsumer):
         # 系统广播通知
         now = self.get_now_time()
         message = f"{now} : {event['message']['message']}"
+        # Send message to WebSocket
+        await self.send(text_data=json.dumps({
+            'message': message
+        }))
+
+
+class RoomConsumer(AsyncWebsocketConsumer):
+    room_owner_id = 1
+    room_group_name = None
+    room_id = None
+
+    @database_sync_to_async
+    def get_room(self):
+        # 查询房间是否存在
+        room = RoomIp.objects.filter(
+            label=self.scope.get('url_route')['kwargs']['room_name'], is_delete=False)
+        if room.exists():
+            room = room.values().first()
+            return room
+        return RoomIp.objects.filter(
+            is_delete=False
+        ).values().first()
+
+    @database_sync_to_async
+    def add_user(self, request):
+        # 用户进入房间记录
+        ip = self.get_user_ip(request)
+        user_ip = UserIp.objects.create(
+            ip=ip
+        )
+        return user_ip
+
+    async def user_connect_or_disconnect_notify(self, notify_type='connect'):
+        # 用户进入/离开房间通知
+        user_ip = self.get_user_ip()
+        now = self.get_now_time()
+        # 更新在线用户人数
+        room_user_number = self.room_user_number(number_type=notify_type)
+
+        notify_content = '进入' if notify_type == 'connect' else '离开'
+        message = f'{now} 系统通知 : {user_ip}{notify_content}了房间({room_user_number}人在线)'
+        rs = dict(
+            message=message,
+            notify=False
+        )
+        # Send message to room group
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'notify_message',
+                'message': rs
+            }
+        )
+
+    def get_user_ip(self):
+        # 获取用户ip
+        request = self.scope['request']
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')
+        if x_forwarded_for and x_forwarded_for[0]:
+            login_ip = x_forwarded_for[0]
+        else:
+            login_ip = request.META.get('REMOTE_ADDR', '')
+        return login_ip
+
+    def room_user_number(self, number_type='connect'):
+        # 更新在线用户人数
+        # todo user aioredis
+        cache_key = f'room:{self.room_id}'
+        room_user_number = cache.get(cache_key, 0)
+        if number_type == 'connect':
+            room_user_number += 1
+        else:
+            room_user_number -= 1
+        cache.set(cache_key, room_user_number)
+        return room_user_number
+
+    def get_now_time(self):
+        return datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    async def connect(self):
+        room = await self.get_room()
+        # Join room group
+        if room:
+            self.room_group_name = room.get('label')
+            await self.channel_layer.group_add(
+                self.room_group_name,
+                self.channel_name
+            )
+            await self.add_user(self.scope['request'])
+            await self.user_connect_or_disconnect_notify()
+            await self.accept()
+
+    async def disconnect(self, close_code):
+        # Leave room group
+        await self.channel_layer.group_discard(
+            self.room_group_name,
+            self.channel_name
+        )
+        # 从房间移除用户
+        await self.user_connect_or_disconnect_notify(notify_type='disconnect')
+
+    # Receive message from WebSocket
+    async def receive(self, text_data=None):
+        # 收到消息后, 再把消息转发到对应的房间(广播消息)
+        text_data_json = json.loads(text_data)
+        message = text_data_json['message']
+
+        rs = dict(
+            message=message,
+            notify=False
+        )
+        # Send message to room group
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'chat_message',
+                'message': rs
+            }
+        )
+
+    async def notify_message(self, event):
+        # 系统广播通知
+        # Send message to WebSocket
+        await self.send(text_data=json.dumps({
+            'message': event['message']['message']
+        }))
+
+    async def chat_message(self, event):
+        # 消息发送
+        now = self.get_now_time()
+        user_ip = self.get_user_ip()
+        message = f"{now} {user_ip} : {event['message']['message']}"
         # Send message to WebSocket
         await self.send(text_data=json.dumps({
             'message': message
