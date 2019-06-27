@@ -270,7 +270,6 @@ class RoomConsumer(AsyncWebsocketConsumer):
             ip=user_ip, room_ip_id=self.room_id, client_port=self.scope['client'][-1]
         )
         is_online = True if notify_type == 'connect' else False
-        is_current_ip_online = False
         if room_user_ips.exists():
             # 进入过房间的用户则更新在线状态
             if is_online:
@@ -351,11 +350,20 @@ class RoomConsumer(AsyncWebsocketConsumer):
     # Receive message from WebSocket
     async def receive(self, text_data=None):
         # 收到消息后, 再把消息转发到对应的房间(广播消息)
+        # fixme ps: 注意, 再调用chat_message方法之前(此处)获取的self里面的东西才是当前连接的客户端的信息, 例如ip地址等信息,
+        # 进入chat_message后, self则是group里面的客户端(for循环中的当前的一个客户端)的信息
         text_data_json = json.loads(text_data)
         message = text_data_json['message']
 
+        now = self.get_now_time()
+        user_ip = self.scope['client'][0]
+        message_data = dict(
+            user_ip=user_ip,
+            time=now,
+            content=message
+        )
         rs = dict(
-            message=message,
+            message=message_data,
             notify=False
         )
         # Send message to room group
@@ -376,19 +384,8 @@ class RoomConsumer(AsyncWebsocketConsumer):
 
     async def chat_message(self, event):
         # 消息发送
-        now = self.get_now_time()
-        user_ip = self.scope['client'][0]
-        message_data = dict(
-            user_ip=user_ip,
-            time=now,
-            content=event['message']['message']
-        )
-        rs = dict(
-            message=message_data,
-            notify=event['message']['notify']
-        )
         # Send message to WebSocket
         await self.send(text_data=json.dumps({
-            'message': rs
+            'message': event['message']
         }))
 
