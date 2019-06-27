@@ -16,6 +16,7 @@ from django.forms.models import model_to_dict
 from django.core.cache import cache
 
 from .models import *
+from .utils import redis_client
 
 
 # todo 1. 广播消息 2. 单人私聊
@@ -210,9 +211,10 @@ class RoomConsumer(AsyncWebsocketConsumer):
         ).values().first()
 
     @database_sync_to_async
-    def add_user(self, request):
+    def add_user(self):
         # 用户进入房间记录
-        ip = self.get_user_ip(request)
+        # ip = self.get_user_ip(request)
+        ip = self.scope['client'][0]
         user_ip = UserIp.objects.create(
             ip=ip
         )
@@ -220,16 +222,22 @@ class RoomConsumer(AsyncWebsocketConsumer):
 
     async def user_connect_or_disconnect_notify(self, notify_type='connect'):
         # 用户进入/离开房间通知
-        user_ip = self.get_user_ip()
+        user_ip = self.scope['client'][0]
         now = self.get_now_time()
         # 更新在线用户人数
-        room_user_number = self.room_user_number(number_type=notify_type)
+        room_user_number = await self.room_user_number(number_type=notify_type)
 
         notify_content = '进入' if notify_type == 'connect' else '离开'
         message = f'{now} 系统通知 : {user_ip}{notify_content}了房间({room_user_number}人在线)'
+        message_data = dict(
+            user_ip=user_ip,
+            time=now,
+            content=message,
+            online=room_user_number
+        )
         rs = dict(
-            message=message,
-            notify=False
+            message=message_data,
+            notify=True
         )
         # Send message to room group
         await self.channel_layer.group_send(
@@ -250,16 +258,24 @@ class RoomConsumer(AsyncWebsocketConsumer):
             login_ip = request.META.get('REMOTE_ADDR', '')
         return login_ip
 
-    def room_user_number(self, number_type='connect'):
+    async def room_user_number(self, number_type='connect'):
         # 更新在线用户人数
         # todo user aioredis
         cache_key = f'room:{self.room_id}'
-        room_user_number = cache.get(cache_key, 0)
+        redis = await redis_client()
+        # room_user_number = cache.get(cache_key, 0)
+        room_user_number = await redis.get(cache_key) or 0
+        room_user_number = int(room_user_number.decode()) if isinstance(room_user_number, bytes) \
+            else int(room_user_number)
         if number_type == 'connect':
             room_user_number += 1
         else:
-            room_user_number -= 1
-        cache.set(cache_key, room_user_number)
+            if room_user_number > 0:
+                room_user_number -= 1
+            else:
+                room_user_number = 0
+        # cache.set(cache_key, room_user_number)
+        await redis.set(cache_key, room_user_number)
         return room_user_number
 
     def get_now_time(self):
@@ -274,7 +290,8 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 self.room_group_name,
                 self.channel_name
             )
-            await self.add_user(self.scope['request'])
+            await self.add_user()
+            # 广播用户进入通知
             await self.user_connect_or_disconnect_notify()
             await self.accept()
 
@@ -284,7 +301,7 @@ class RoomConsumer(AsyncWebsocketConsumer):
             self.room_group_name,
             self.channel_name
         )
-        # 从房间移除用户
+        # 从房间移除用户, 广播通知
         await self.user_connect_or_disconnect_notify(notify_type='disconnect')
 
     # Receive message from WebSocket
@@ -310,16 +327,24 @@ class RoomConsumer(AsyncWebsocketConsumer):
         # 系统广播通知
         # Send message to WebSocket
         await self.send(text_data=json.dumps({
-            'message': event['message']['message']
+            'message': event['message']
         }))
 
     async def chat_message(self, event):
         # 消息发送
         now = self.get_now_time()
-        user_ip = self.get_user_ip()
-        message = f"{now} {user_ip} : {event['message']['message']}"
+        user_ip = self.scope['client'][0]
+        message_data = dict(
+            user_ip=user_ip,
+            time=now,
+            content=event['message']['message']
+        )
+        rs = dict(
+            message=message_data,
+            notify=event['message']['notify']
+        )
         # Send message to WebSocket
         await self.send(text_data=json.dumps({
-            'message': message
+            'message': rs
         }))
 
