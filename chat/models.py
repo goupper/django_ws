@@ -352,6 +352,9 @@ class RoomUserIp(models.Model):
     client_port = models.CharField(
         max_length=16, blank=True, verbose_name='port'
     )
+    disconnect_type = models.PositiveSmallIntegerField(
+        default=0, blank=True, choices=((0, ''), (1, '用户断开'), (2, '系统重启'), (3, '连接超时'), (4, '违规被踢'))
+    )
     # 每一次websocket连接, port都不一样, 因此同一个ip可能会有多个websocket连接
 
     class Meta:
@@ -362,9 +365,61 @@ class RoomUserIp(models.Model):
             models.Index(fields=['room_ip_id']),
             models.Index(fields=['is_online']),
             models.Index(fields=['connect_time']),
-            models.Index(fields=['client_port'])
+            models.Index(fields=['client_port']),
+            models.Index(fields=['disconnect_type'])
         ]
         unique_together = ('ip', 'client_port')
+
+    def __str__(self):
+        return str(self.ip)
+
+
+class MessageIp(models.Model):
+    room = models.ForeignKey(
+        RoomIp, on_delete=models.CASCADE, related_name='messages'
+    )
+    user_id = models.IntegerField(
+        default=0, blank=True, verbose_name='UserId'
+    )
+    content = models.TextField(
+        blank=True, verbose_name='content'
+    )
+    send_time = models.DateTimeField(
+        auto_now_add=True, blank=True, verbose_name='send time'
+    )
+    is_show = models.BooleanField(
+        default=True, blank=True, verbose_name='if show'
+    )
+
+    class Meta:
+        verbose_name = 'MessageIp'
+        verbose_name_plural = verbose_name
+        indexes = [
+            models.Index(fields=['send_time']),
+            models.Index(fields=['user_id'])
+        ]
+
+    def __str__(self):
+        return self.content[:10]
+
+
+class BlackIp(AbstractModel):
+    ip = models.GenericIPAddressField(
+        unique=True,
+    )
+    start_time = models.DateTimeField(
+        blank=True, null=True,
+    )
+    end_time = models.DateTimeField(
+        blank=True, null=True
+    )
+
+    class Meta:
+        verbose_name = 'BlackIp'
+        verbose_name_plural = verbose_name
+        indexes = [
+            models.Index(fields=['ip'])
+        ]
 
     def __str__(self):
         return str(self.ip)

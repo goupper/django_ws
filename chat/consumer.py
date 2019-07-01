@@ -193,6 +193,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         }))
 
 
+# todo 1.当前在线用户列表 2. 用户消息记录
 class RoomConsumer(AsyncWebsocketConsumer):
     room_owner_id = 1
     room_group_name = None
