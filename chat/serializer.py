@@ -60,3 +60,10 @@ class BlackIpSerializer(serializers.ModelSerializer):
     class Meta:
         model = BlackIp
         fields = '__all__'
+
+
+class RoomUserIpSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = RoomUserIp
+        fields = '__all__'

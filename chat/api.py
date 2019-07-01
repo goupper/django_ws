@@ -110,3 +110,21 @@ class BlackIpViewSet(viewsets.ModelViewSet):
     # def perform_destroy(self, instance):
     #     instance.is_delete = True
     #     instance.save(update_fields=['is_delete'])
+
+
+class RoomUserIpViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = RoomUserIp.objects.filter(
+        is_online=True
+    ).order_by('-connect_time')
+    serializer_class = RoomUserIpSerializer
+    filter_backends = (SearchFilter, OrderingFilter)
+    order_fields = ('connect_time', 'last_connect_time')
+    search_fields = ('disconnect_type', 'room_ip_id')
+
+    def list(self, request, *args, **kwargs):
+        room_ip_id = request.GET.get('room_ip_id', '')
+        if room_ip_id:
+            self.queryset = self.queryset.filter(
+                room_ip_id=room_ip_id
+            ).order_by('-connect_time')
+        return super(RoomUserIpViewSet, self).list(request, *args, **kwargs)

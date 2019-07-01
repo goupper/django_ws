@@ -317,7 +317,7 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 room_user_ips.update(is_online=is_online, last_connect_time=datetime.datetime.now())
             else:
                 # 离线时更新离线时间
-                room_user_ips.update(is_online=is_online, disconnect_time=datetime.datetime.now())
+                room_user_ips.update(disconnect_type=1, is_online=is_online, disconnect_time=datetime.datetime.now())
         else:
             # 没有进入过的用户记录
             RoomUserIp.objects.create(

@@ -29,6 +29,7 @@ schema_view = get_swagger_view(title='ws API')
 router.register('api/room', api.RoomIpViewSet)
 router.register('api/message', api.MessageIpViewSet)
 router.register('api/black', api.BlackIpViewSet)
+router.register('api/room_user', api.RoomUserIpViewSet)
 
 
 urlpatterns = [
