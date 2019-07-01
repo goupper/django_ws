@@ -36,14 +36,27 @@ class RoomUserSerializer(serializers.ModelSerializer):
 
 
 class MessageIpSerializer(serializers.ModelSerializer):
+    ip = serializers.SerializerMethodField()
+
+    def get_ip(self, obj):
+        return UserIp.objects.filter(
+            id=obj.user_id
+        ).first().ip
 
     class Meta:
         model = MessageIp
-        fields = '__all__'
+        exclude = ('user_id', )
 
 
 class RoomIpSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RoomIp
+        fields = '__all__'
+
+
+class BlackIpSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = BlackIp
         fields = '__all__'

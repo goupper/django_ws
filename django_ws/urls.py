@@ -17,15 +17,18 @@ from django.contrib import admin
 from django.urls import path, re_path
 from django.views.static import serve
 from rest_framework.routers import DefaultRouter
+from rest_framework_swagger.views import get_swagger_view
 
 from chat import views, api
 from django_ws.settings import MEDIA_ROOT, STATIC_ROOT
 
 
 router = DefaultRouter()
+schema_view = get_swagger_view(title='ws API')
 
 router.register('api/room', api.RoomIpViewSet)
 router.register('api/message', api.MessageIpViewSet)
+router.register('api/black', api.BlackIpViewSet)
 
 
 urlpatterns = [
@@ -41,4 +44,8 @@ urlpatterns = [
     path('quit/', views.quit, name='quit-room')
 ]
 
-urlpatterns += router.urls
+api_urls = [
+    re_path('^api/$', schema_view),
+]
+
+urlpatterns += router.urls + api_urls

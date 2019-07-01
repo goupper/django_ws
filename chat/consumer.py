@@ -212,6 +212,7 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 is_delete=False
             ).values().first()
         self.room_id = room.get('id')
+        self.room_group_name = room.get('label')
         return room
 
     @database_sync_to_async
@@ -276,7 +277,7 @@ class RoomConsumer(AsyncWebsocketConsumer):
         # 更新在线用户人数
         # room_user_number = await self.room_user_number(number_type=notify_type)
         room_user_number, is_notify = await self.room_user_record(notify_type=notify_type)
-        if is_notify:
+        if is_notify and room_user_number > 0:
             notify_content = '进入' if notify_type == 'connect' else '离开'
             message = f'{now} 系统通知 : {user_ip}{notify_content}了房间({room_user_number}人在线)'
             message_data = dict(
@@ -370,6 +371,8 @@ class RoomConsumer(AsyncWebsocketConsumer):
         if user_if_black:
             # return HttpResponseForbidden(content='ip被锁定!')
             self.close()
+            # 必须返回, 否则会继续往下执行
+            return
         # Join room group
         if room:
             self.room_group_name = room.get('label')
@@ -382,7 +385,8 @@ class RoomConsumer(AsyncWebsocketConsumer):
             await self.user_connect_or_disconnect_notify()
             await self.accept()
         # return HttpResponseNotFound('房间不存在或者已经关闭!')
-        self.close()
+        else:
+            self.close()
 
     async def disconnect(self, close_code):
         # Leave room group
@@ -404,6 +408,7 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 self.channel_name
             )
             self.close()
+            return
             # return HttpResponseForbidden('ip被锁定!')
         text_data_json = json.loads(text_data)
         message = text_data_json['message']
