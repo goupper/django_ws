@@ -388,7 +388,10 @@ class MessageIp(models.Model):
         auto_now_add=True, blank=True, verbose_name='send time'
     )
     is_show = models.BooleanField(
-        default=True, blank=True, verbose_name='if show'
+        default=True, blank=True, verbose_name='is_show'
+    )
+    is_notify = models.BooleanField(
+        default=False, blank=True, verbose_name='is_notify'
     )
 
     class Meta:

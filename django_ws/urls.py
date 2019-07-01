@@ -16,9 +16,16 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, re_path
 from django.views.static import serve
+from rest_framework.routers import DefaultRouter
 
-from chat import views
+from chat import views, api
 from django_ws.settings import MEDIA_ROOT, STATIC_ROOT
+
+
+router = DefaultRouter()
+
+router.register('api/room', api.RoomIpViewSet)
+router.register('api/message', api.MessageIpViewSet)
 
 
 urlpatterns = [
@@ -33,3 +40,5 @@ urlpatterns = [
     re_path('^rooms/$', views.rooms, name='rooms-url'),
     path('quit/', views.quit, name='quit-room')
 ]
+
+urlpatterns += router.urls

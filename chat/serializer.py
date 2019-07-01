@@ -32,4 +32,18 @@ class RoomUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RoomUser
-        read_only_fields = '__all__'
+        fields = '__all__'
+
+
+class MessageIpSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = MessageIp
+        fields = '__all__'
+
+
+class RoomIpSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = RoomIp
+        fields = '__all__'

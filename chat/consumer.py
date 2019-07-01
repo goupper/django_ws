@@ -14,6 +14,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.forms.models import model_to_dict
 from django.core.cache import cache
+from django.http.response import HttpResponseForbidden, HttpResponseNotFound
 
 from .models import *
 from .utils import redis_client
@@ -206,12 +207,50 @@ class RoomConsumer(AsyncWebsocketConsumer):
             label=self.scope.get('url_route')['kwargs']['room_name'], is_delete=False)
         if room.exists():
             room = room.values().first()
-            return room
-        room = RoomIp.objects.filter(
-            is_delete=False
-        ).values().first()
+        else:
+            room = RoomIp.objects.filter(
+                is_delete=False
+            ).values().first()
         self.room_id = room.get('id')
         return room
+
+    @database_sync_to_async
+    def check_user_if_black(self):
+        """
+        检查用户ip是否在黑名单中以及过期时间
+        :return:
+        """
+        ip = self.scope['client'][0]
+        black_ip = BlackIp.objects.filter(
+            is_delete=False, ip=ip
+        ).order_by('-create_time')
+        if not black_ip.exists():
+            return False
+        black_ip = black_ip.first()
+        if black_ip.end_time:
+            # 如果有设置禁用的具体时间段
+            return black_ip.end_time > datetime.datetime.now()
+        return True
+
+    @database_sync_to_async
+    def send_message(self, content=''):
+        room = RoomIp.objects.filter(
+            label=self.scope.get('url_route')['kwargs']['room_name']
+        ).first()
+        user_id = UserIp.objects.filter(
+            ip=self.get_user_ip()).first().id
+        message_ips = MessageIp.objects.filter(
+            room=room, user_id=user_id
+        )
+        if message_ips.exists():
+            message_ips.update(
+                content=content, send_time=datetime.datetime.now()
+            )
+        else:
+            MessageIp.objects.create(
+                room=room, content=content,
+                user_id=UserIp.objects.filter(ip=self.get_user_ip()).first().id
+            )
 
     @database_sync_to_async
     def add_user(self):
@@ -327,6 +366,10 @@ class RoomConsumer(AsyncWebsocketConsumer):
 
     async def connect(self):
         room = await self.get_room()
+        user_if_black = await self.check_user_if_black()
+        if user_if_black:
+            # return HttpResponseForbidden(content='ip被锁定!')
+            self.close()
         # Join room group
         if room:
             self.room_group_name = room.get('label')
@@ -338,6 +381,8 @@ class RoomConsumer(AsyncWebsocketConsumer):
             # 广播用户进入通知
             await self.user_connect_or_disconnect_notify()
             await self.accept()
+        # return HttpResponseNotFound('房间不存在或者已经关闭!')
+        self.close()
 
     async def disconnect(self, close_code):
         # Leave room group
@@ -353,6 +398,13 @@ class RoomConsumer(AsyncWebsocketConsumer):
         # 收到消息后, 再把消息转发到对应的房间(广播消息)
         # fixme ps: 注意, 再调用chat_message方法之前(此处)获取的self里面的东西才是当前连接的客户端的信息, 例如ip地址等信息,
         # 进入chat_message后, self则是group里面的客户端(for循环中的当前的一个客户端)的信息
+        if await self.check_user_if_black():
+            await self.channel_layer.group_discard(
+                self.room_group_name,
+                self.channel_name
+            )
+            self.close()
+            # return HttpResponseForbidden('ip被锁定!')
         text_data_json = json.loads(text_data)
         message = text_data_json['message']
 
@@ -367,6 +419,7 @@ class RoomConsumer(AsyncWebsocketConsumer):
             message=message_data,
             notify=False
         )
+        await self.send_message(content=message)
         # Send message to room group
         await self.channel_layer.group_send(
             self.room_group_name,
