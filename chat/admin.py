@@ -51,9 +51,12 @@ class MessageIpAdmin(admin.ModelAdmin):
     list_filter = ('room_id', )
 
     def get_ip(self, obj):
-        return UserIp.objects.filter(
+        user_ip = UserIp.objects.filter(
             id=obj.user_id
-        ).first().ip
+        )
+        if user_ip.exists():
+            return user_ip.first().ip
+        return ''
     get_ip.short_description = 'ip'
 
 

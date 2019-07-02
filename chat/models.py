@@ -376,7 +376,8 @@ class RoomUserIp(models.Model):
 
 class MessageIp(models.Model):
     room = models.ForeignKey(
-        RoomIp, on_delete=models.CASCADE, related_name='messages'
+        RoomIp, on_delete=models.CASCADE, related_name='messages',
+        blank=True, null=True
     )
     user_id = models.IntegerField(
         default=0, blank=True, verbose_name='UserId'

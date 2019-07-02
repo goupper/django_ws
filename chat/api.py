@@ -23,6 +23,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.cache import never_cache
 from django.utils.six import text_type
+from django.db.models import Q
 
 from .serializer import *
 from .models import *
@@ -39,12 +40,21 @@ class MessageViewSet(viewsets.ReadOnlyModelViewSet):
 class MessageIpViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = MessageIp.objects.filter(
         is_show=True
-    ).order_by('-send_time')
+    ).order_by('send_time')
     serializer_class = MessageIpSerializer
     filter_backends = (OrderingFilter, SearchFilter)
     order_fields = ('send_time', 'user_id')
     search_fields = ('user_id', 'room_id')
     pagination_class = CustomPageNumberPagination
+
+    def get_queryset(self):
+        if not self.request.GET.get('room_id', None):
+            self.queryset = MessageIp.objects.none()
+        else:
+            self.queryset = self.queryset.filter(
+                Q(room_id=self.request.GET.get('room_id')) | Q(room__isnull=True)
+            )
+        return self.queryset
 
 
 class RoomIpViewSet(viewsets.ModelViewSet):
@@ -107,6 +117,18 @@ class BlackIpViewSet(viewsets.ModelViewSet):
             return super(BlackIpViewSet, self).destroy(request, *args, **kwargs)
         raise PermissionDenied()
 
+    @action(methods=['delete'], detail=False)
+    def remove(self, request):
+        """
+        remove black ip
+        :return:
+        """
+        ip = request.data.get('ip', '')
+        BlackIp.objects.filter(
+            ip=ip
+        ).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     # def perform_destroy(self, instance):
     #     instance.is_delete = True
     #     instance.save(update_fields=['is_delete'])
@@ -115,14 +137,14 @@ class BlackIpViewSet(viewsets.ModelViewSet):
 class RoomUserIpViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = RoomUserIp.objects.filter(
         is_online=True
-    ).order_by('-connect_time')
+    ).order_by('connect_time')
     serializer_class = RoomUserIpSerializer
     filter_backends = (SearchFilter, OrderingFilter)
     order_fields = ('connect_time', 'last_connect_time')
     search_fields = ('disconnect_type', 'room_ip_id')
 
     def list(self, request, *args, **kwargs):
-        room_ip_id = request.GET.get('room_ip_id', '')
+        room_ip_id = request.GET.get('room_id', '')
         if room_ip_id:
             self.queryset = self.queryset.filter(
                 room_ip_id=room_ip_id
